@@ -35,7 +35,7 @@ class GenreDataset(Dataset):
         return torch.tensor(self.features[idx], dtype=torch.float32), torch.tensor(self.labels[idx], dtype=torch.long)
 
 # Load and preprocess data
-def load_data(path, genres, max_per_genre=30, feature_size=1000):
+def load_data(path, genres, max_per_genre=30, feature_size=500):
     features, labels = [], []
     for label, genre in enumerate(genres):
         genre_path = join(path, genre)
@@ -119,7 +119,7 @@ def main():
     num_classes = len(genres)
     model = LogisticRegressionModel(input_size, num_classes)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
 
     # Train and test model
     train_model(model, train_loader, criterion, optimizer, epochs=50, device=device)
