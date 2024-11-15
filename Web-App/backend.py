@@ -8,6 +8,21 @@ import numpy as np
 from scipy.io import wavfile
 from scipy.signal import stft
 from pydub import AudioSegment  # To handle mp3 to wav conversion
+import scipy.io.wavfile as wav
+import scipy.signal as signal
+from matplotlib import pyplot as plt
+import os
+import numpy as np
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from time import time
+from sklearn.model_selection import train_test_split
+from torch.utils.data import Subset
+import torch.nn.functional as F
+import gc
+from pathlib import Path
+
 
 
 
@@ -18,79 +33,150 @@ UPLOAD_FOLDER = 'uploads/'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'mp3', 'wav'}
 
-# Model architecture
+# Define the model
+# Custom Dataset class
+class NumpyDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.Zsamples = []
+        self.Tsamples = []
+        self.Fsamples = []
+        
+        # Load file paths and labels
+        for label, class_dir in enumerate(os.listdir(root_dir)):
+            class_path = os.path.join(root_dir, class_dir)
+            if os.path.isdir(class_path):
+                if (class_path != path):
+                    continue
+                for file_name in os.listdir(class_path):
+                    if file_name.endswith("Z.npy"):
+                        file_path = os.path.join(class_path, file_name)
+                        self.Zsamples.append((file_path, label))
+                    elif file_name.endswith("T.npy"):
+                        file_path = os.path.join(class_path, file_name)
+                        self.Tsamples.append((file_path, label))
+                    elif file_name.endswith("F.npy"):
+                        file_path = os.path.join(class_path, file_name)
+                        self.Fsamples.append((file_path, label))
+    
+    def __len__(self):
+        return len(self.Zsamples)
+    
+    def __getitem__(self, idx):
+        file_path, label = self.Zsamples[idx]
+        data = np.load(file_path)  # Load numpy array
+        real = np.real(data)
+        imag = np.imag(data)
+        mag = np.abs(data)
+        angle = np.angle(data)
+        real = np.expand_dims(real, axis=0)
+        imag = np.expand_dims(imag, axis=0)
+        mag = np.expand_dims(mag, axis=0)
+        angle = np.expand_dims(angle, axis=0)
+        data = np.concatenate((real, imag, mag, angle), axis=0)
+        data = torch.tensor(data, dtype=torch.float32)  # Convert to PyTorch tensor
+        
+        if self.transform:
+            data = self.transform(data)
+        
+        return data, label
+
+    def spectrograms(self, idx):
+        Zfile_path, label = self.Zsamples[idx]
+        Tfile_path, label = self.Tsamples[idx]
+        Ffile_path, label = self.Fsamples[idx]
+        Zdata = np.load(Zfile_path)  # Load numpy array
+        Tdata = np.load(Tfile_path)  # Load numpy array
+        Fdata = np.load(Ffile_path)  # Load numpy array
+        print(Zdata.shape)
+        # Create a 2x2 subplot grid
+        fig, axes = plt.subplots(5, 1, figsize=(10, 16))
+        
+        # First subplot
+        c1 = axes[0].pcolormesh(Tdata, Fdata, np.log(np.abs(Zdata)), cmap='gnuplot')
+        fig.colorbar(c1, ax=axes[0])
+        axes[0].set_title("Spectrogram Magnitude")
+        
+        # Second subplot
+        c2 = axes[1].pcolormesh(Tdata, Fdata, np.angle(Zdata), cmap='gnuplot')
+        fig.colorbar(c2, ax=axes[1])
+        axes[1].set_title("Spectrogram Angle")      
+
+        # Third subplot
+        c3 = axes[2].pcolormesh(Tdata, Fdata, np.log(np.square(np.real(Zdata))), cmap='gnuplot')
+        fig.colorbar(c3, ax=axes[2])
+        axes[2].set_title("Spectrogram Real")  
+
+        # Fourth subplot
+        c4 = axes[3].pcolormesh(Tdata, Fdata, np.log(np.square(np.imag(Zdata))), cmap='gnuplot')
+        fig.colorbar(c4, ax=axes[3])
+        axes[3].set_title("Spectrogram Imag")  
+
+        # Fifth subplot
+        c5 = axes[4].pcolormesh(Tdata, Fdata, np.log(np.square(np.imag(Zdata)) + np.square(np.real(Zdata))), cmap='gnuplot')
+        fig.colorbar(c4, ax=axes[4])
+        axes[4].set_title("Spectrogram Imag + Real") 
+
+
+
+
 class MusicNet(nn.Module):
+
     def __init__(self):
         super(MusicNet, self).__init__()
-        # C1: Convolutional Layer (input channels: 1, output channels: 6, kernel size: 3x3)
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=8, kernel_size=3, stride=1, padding='same', groups= 4)
-        
-        # C2: Convolutional Layer (input channels: 6, output channels: 12, kernel size: 3x3)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=12, kernel_size=3, stride=1, padding='same')
-        
-        # S3: Subsampling (Max Pooling with kernel size: 2x2 and stride: 2)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        
-        # C4: Convolutional Layer (input channels: 12, output channels: 24, kernel size: 3x3)
-        self.conv3 = nn.Conv2d(in_channels=12, out_channels=14, kernel_size=3, stride=1, padding='same')
 
-        # C5: Convolutional Layer (input channels: 6, output channels: 16, kernel size: 3x3)
-        self.conv4 = nn.Conv2d(in_channels=14, out_channels=16, kernel_size=3, stride=1, padding='same')
+        self.cLayer1 = nn.Sequential(
+            nn.Conv2d(in_channels=4, out_channels=64, kernel_size=3, stride=1, padding='same', groups=4),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding='same'),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+
+        self.cLayer2 = nn.Sequential(
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding='same'),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+
+        self.cLayer3 = nn.Sequential(
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding='same'),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+
+        self.cLayer4 = nn.Sequential(
+            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding='same'),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+
+        self.fLayer = nn.Sequential(
+            nn.Linear(in_features=512*34*15, out_features=512),
+            nn.ReLU(),
+            nn.Linear(in_features=512, out_features=128),
+            nn.ReLU(),
+            nn.Linear(in_features=128, out_features=10)
+        )
+
+    def forward(self, x, return_features=False):
+        x = self.cLayer1(x)
+        x = self.cLayer2(x)
+        x = self.cLayer3(x)
+        x = self.cLayer4(x)
         
-        # S6: Subsampling (Max Pooling with kernel size: 2x2 and stride: 2)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        x = x.view(x.shape[0], 512*34*15)       # Flatten before passing to fully connected layers
 
-        # C7: Convolutional Layer (input channels: 48, output channels: 96, kernel size: 3x3)
-        self.conv5 = nn.Conv2d(in_channels=16, out_channels=18, kernel_size=3, stride=1, padding='same')
-
-        # C8: Convolutional Layer (input channels: 6, output channels: 16, kernel size: 3x3)
-        self.conv6 = nn.Conv2d(in_channels=18, out_channels=20, kernel_size=3, stride=1, padding='same')
-        
-        # S9: Subsampling (Max Pooling with kernel size: 2x2 and stride: 2)
-        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        self.conv7 = nn.Conv2d(in_channels=20, out_channels=22, kernel_size=3, stride=1, padding='same')
-
-        self.conv8 = nn.Conv2d(in_channels=22, out_channels=24, kernel_size=3, stride=1, padding='same')
-
-        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
-       
-        
-        # C10: Fully connected convolutional layer (input size: 192, output size: 120)
-        self.fc1 = nn.Linear(in_features=24*34*15, out_features=4000)
-        
-        # F11: Fully connected layer (input size: 10000, output size: 1000)
-        self.fc2 = nn.Linear(in_features=4000, out_features=1000)
-
-        # F12: Fully connected layer (input size: 1000, output size: 100)
-        self.fc3 = nn.Linear(in_features=1000, out_features=100)
-        
-        # Output layer (input size: 100, output size: 10)
-        self.fc4 = nn.Linear(in_features=100, out_features=10)
-
-    def forward(self, x):
-        # Apply the first convolution and activation function
-        # print('x dims', x.shape)
-        x = F.relu(self.conv1(x))    # C1
-        x = F.relu(self.conv2(x))    # C2
-        x = self.pool1(x)            # S3
-        x = F.relu(self.conv3(x))    # C4
-        x = F.relu(self.conv4(x))    # C5
-        x = self.pool2(x)            # S6
-        x = F.relu(self.conv5(x))    # C7
-        x = F.relu(self.conv6(x))    # C8
-        x = self.pool3(x)            # S9
-        x = F.relu(self.conv7(x))
-        x = F.relu(self.conv8(x))
-        x = self.pool4(x)
-        
-        x = x.view(x.shape[0], 24*34*15)       # Flatten before passing to fully connected layers
-        # Fully connected layers with activation functions
-        x = F.relu(self.fc1(x))      # C10
-        x = F.relu(self.fc2(x))      # F11
-        x = F.relu(self.fc3(x))      # F12
-        # Output layer (no activation function because we will use CrossEntropyLoss which includes Softmax)
-        x = self.fc4(x)              # Output layer
+        if not return_features:
+            x = self.fLayer(x)
+             
         return x
 
     
@@ -99,7 +185,7 @@ class MusicNet(nn.Module):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = MusicNet()
 model = MusicNet().to(device)
-model.load_state_dict(torch.load("C:/Users/olabinmo/CSSE 416/MusicGenreClassifier.pth", map_location=device))
+model.load_state_dict(torch.load("C:/Users/olabinmo/CSSE 416/MusicGenreClassifier 1.pth", map_location=device))
 model.eval()  # Set model to evaluation mode
 
 # Function to convert mp3 to wav if necessary
@@ -155,6 +241,19 @@ def classify_genre():
            
     print(file_path)
 
+    transform = transforms.Compose([
+    transforms.CenterCrop((544, 240)),
+    transforms.Normalize((0,), (0.5,))
+])
+    
+    music_dataset = NumpyDataset(root_dir=root_dir, transform=transform)
+
+    print(len(music_dataset))
+
+    music_loader = DataLoader(dataset=music_dataset, batch_size=1, shuffle=False)
+
+    music_classifier(model, music_loader)
+
     try:
         # Convert to spectrogram
         print("Going to change the audio to a spectogram")
@@ -164,8 +263,9 @@ def classify_genre():
         # Perform prediction
 
         with torch.no_grad():
-            outputs = model(spectrogram)
-            _, predicted = torch.max(outputs, 1)
+            image, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
 
         print("Done with prediction " + predicted)
         # Map prediction to genre label

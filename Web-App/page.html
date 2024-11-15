@@ -9,13 +9,15 @@
 <body>
     <div class="container">
         <h1>Music Genre Classifier</h1>
-        <form id="uploadForm">
+        <form id="uploadForm" enctype="multipart/form-data">
             <input type="file" id="audioFile" name="audioFile" accept=".mp3, .wav" required>
             <button type="submit">Classify Genre</button>
         </form>
         
+        <!-- Audio player and result section -->
         <audio id="audioPlayer" controls style="display:none;"></audio>
-        <div id="result"></div>
+        <div id="result"></div><audio id="audioPlayer" controls style="display:none;"></audio>
+      
     </div>
     <script src="script.js"></script>
 </body>
