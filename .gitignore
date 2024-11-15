@@ -2,4 +2,6 @@ genres_original/
 genres_images/
 genres_music/
 genres_user_test/
+test_genres_images/
+train_genres_images/
 MusicGenreClassifier.pth
