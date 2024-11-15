@@ -33,6 +33,14 @@ UPLOAD_FOLDER = 'uploads/'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'mp3', 'wav'}
 
+NPY_FOLDER = 'npy/'
+app.config['UPLOAD_FOLDER'] = NPY_FOLDER
+app.config['ALLOWED_EXTENSIONS'] = {'npy'}
+
+
+
+
+
 # Define the model
 # Custom Dataset class
 class NumpyDataset(Dataset):
@@ -42,9 +50,10 @@ class NumpyDataset(Dataset):
         self.Zsamples = []
         self.Tsamples = []
         self.Fsamples = []
+
         
         # Load file paths and labels
-        for label, class_dir in enumerate(os.listdir(root_dir)):
+        for label, class_dir in enumerate(os.listdir()):
             class_path = os.path.join(root_dir, class_dir)
             if os.path.isdir(class_path):
                 if (class_path != path):
@@ -81,44 +90,6 @@ class NumpyDataset(Dataset):
             data = self.transform(data)
         
         return data, label
-
-    def spectrograms(self, idx):
-        Zfile_path, label = self.Zsamples[idx]
-        Tfile_path, label = self.Tsamples[idx]
-        Ffile_path, label = self.Fsamples[idx]
-        Zdata = np.load(Zfile_path)  # Load numpy array
-        Tdata = np.load(Tfile_path)  # Load numpy array
-        Fdata = np.load(Ffile_path)  # Load numpy array
-        print(Zdata.shape)
-        # Create a 2x2 subplot grid
-        fig, axes = plt.subplots(5, 1, figsize=(10, 16))
-        
-        # First subplot
-        c1 = axes[0].pcolormesh(Tdata, Fdata, np.log(np.abs(Zdata)), cmap='gnuplot')
-        fig.colorbar(c1, ax=axes[0])
-        axes[0].set_title("Spectrogram Magnitude")
-        
-        # Second subplot
-        c2 = axes[1].pcolormesh(Tdata, Fdata, np.angle(Zdata), cmap='gnuplot')
-        fig.colorbar(c2, ax=axes[1])
-        axes[1].set_title("Spectrogram Angle")      
-
-        # Third subplot
-        c3 = axes[2].pcolormesh(Tdata, Fdata, np.log(np.square(np.real(Zdata))), cmap='gnuplot')
-        fig.colorbar(c3, ax=axes[2])
-        axes[2].set_title("Spectrogram Real")  
-
-        # Fourth subplot
-        c4 = axes[3].pcolormesh(Tdata, Fdata, np.log(np.square(np.imag(Zdata))), cmap='gnuplot')
-        fig.colorbar(c4, ax=axes[3])
-        axes[3].set_title("Spectrogram Imag")  
-
-        # Fifth subplot
-        c5 = axes[4].pcolormesh(Tdata, Fdata, np.log(np.square(np.imag(Zdata)) + np.square(np.real(Zdata))), cmap='gnuplot')
-        fig.colorbar(c4, ax=axes[4])
-        axes[4].set_title("Spectrogram Imag + Real") 
-
-
 
 
 class MusicNet(nn.Module):
@@ -228,6 +199,7 @@ def classify_genre():
     if 'audioFile' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
     
+    #Delete all files before uploading a new one
     upload_folder = 'uploads'
     if not os.path.exists(upload_folder):
         os.makedirs(upload_folder)
