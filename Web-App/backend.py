@@ -6,24 +6,14 @@ import torch.nn.functional as F
 import os
 import numpy as np
 from scipy.io import wavfile
-from scipy.signal import stft
 from pydub import AudioSegment  # To handle mp3 to wav conversion
-import scipy.io.wavfile as wav
 import scipy.signal as signal
-from matplotlib import pyplot as plt
 import os
 import numpy as np
-
-import pandas as pd
-import matplotlib.pyplot as plt
-from time import time
-from sklearn.model_selection import train_test_split
-from torch.utils.data import Subset
 import torch.nn.functional as F
-import gc
-from pathlib import Path
 import shutil
 from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as transforms
 
 
 app = Flask(__name__)
@@ -133,15 +123,15 @@ class MusicNet(nn.Module):
         return x
 
 # Function to convert mp3 to wav if necessary
-# def convert_to_wav(filepath, target_sample_rate=22050):
-#     if filepath.endswith(".mp3"):
-#         audio = AudioSegment.from_mp3(filepath)
-#         wav_path = filepath.rsplit(".", 1)[0] + ".wav"  # Change file extension to .wav
-#         audio = audio.set_frame_rate(target_sample_rate).set_channels(1)  # Set sample rate and mono
-#         audio.export(wav_path, format="wav")
-#         os.remove(filepath)  # Remove the original mp3 file
-#         return wav_path
-#     return filepath
+def convert_mp3_to_wav(input_file: str, output_file: str, sample_rate: int = 22050):
+    try: 
+        audio = AudioSegment.from_mp3(input_file) # Load the MP3 file
+        audio = audio.set_frame_rate(sample_rate) # Set the desired sample rate
+        audio.export(output_file, format="wav") # Export as WAV
+        
+        print(f"Conversion successful! File saved to: {output_file}")
+    except Exception as e:
+        print(f"Error during conversion: {e}")
 
 # Function to convert audio to spectrograms (sample_rate=22050, clip_length=6*22050+1=132301)
 def audio_to_spectrograms(filepath, savepath, sample_rate=22050, clip_length=132301):
@@ -238,6 +228,11 @@ def classify_genre():
     file.save(file_path)
            
     print(file_path)
+    if (file_path.endswith('.mp3')):
+        convert_mp3_to_wav(file_path, file_path[:-4] + ".wav")
+        file_path = file_path[:-4] + ".wav"
+    elif (not file_path.endswith(".wav")):
+        return jsonify({"error": "Incompatible file type"}), 401
 
     #try:
     # Convert to spectrogram
