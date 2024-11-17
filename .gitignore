@@ -4,4 +4,6 @@ genres_music/
 genres_user_test/
 test_genres_images/
 train_genres_images/
+uploads/
+npy/
 MusicGenreClassifier.pth
