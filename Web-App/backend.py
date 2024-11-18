@@ -6,27 +6,19 @@ import torch.nn.functional as F
 import os
 import numpy as np
 from scipy.io import wavfile
-from scipy.signal import stft
 from pydub import AudioSegment  # To handle mp3 to wav conversion
-import scipy.io.wavfile as wav
 import scipy.signal as signal
-from matplotlib import pyplot as plt
 import os
 import numpy as np
-
-import pandas as pd
-import matplotlib.pyplot as plt
-from time import time
-from sklearn.model_selection import train_test_split
-from torch.utils.data import Subset
 import torch.nn.functional as F
-import gc
-from pathlib import Path
-
-
-
+import shutil
+from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as transforms
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
 
 # Define the upload folder and allowed file extensions
 UPLOAD_FOLDER = 'uploads/'
@@ -34,46 +26,26 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'mp3', 'wav'}
 
 NPY_FOLDER = 'npy/'
-app.config['UPLOAD_FOLDER'] = NPY_FOLDER
+app.config['NPY_FOLDER'] = NPY_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'npy'}
-
-
-
-
-
-# Define the model
-# Custom Dataset class
 class NumpyDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
-        self.root_dir = root_dir
+    def __init__(self, dir, transform=None):
+        self.dir = dir
         self.transform = transform
         self.Zsamples = []
-        self.Tsamples = []
-        self.Fsamples = []
-
         
         # Load file paths and labels
-        for label, class_dir in enumerate(os.listdir()):
-            class_path = os.path.join(root_dir, class_dir)
-            if os.path.isdir(class_path):
-                if (class_path != path):
-                    continue
-                for file_name in os.listdir(class_path):
-                    if file_name.endswith("Z.npy"):
-                        file_path = os.path.join(class_path, file_name)
-                        self.Zsamples.append((file_path, label))
-                    elif file_name.endswith("T.npy"):
-                        file_path = os.path.join(class_path, file_name)
-                        self.Tsamples.append((file_path, label))
-                    elif file_name.endswith("F.npy"):
-                        file_path = os.path.join(class_path, file_name)
-                        self.Fsamples.append((file_path, label))
+        if os.path.isdir(dir):
+            for file_name in os.listdir(dir):
+                file_path = os.path.join(dir, file_name)
+                self.Zsamples.append(file_path)
+
     
     def __len__(self):
         return len(self.Zsamples)
     
     def __getitem__(self, idx):
-        file_path, label = self.Zsamples[idx]
+        file_path = self.Zsamples[idx]
         data = np.load(file_path)  # Load numpy array
         real = np.real(data)
         imag = np.imag(data)
@@ -89,7 +61,7 @@ class NumpyDataset(Dataset):
         if self.transform:
             data = self.transform(data)
         
-        return data, label
+        return data
 
 
 class MusicNet(nn.Module):
@@ -150,28 +122,19 @@ class MusicNet(nn.Module):
              
         return x
 
-    
-
-# Load model
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = MusicNet()
-model = MusicNet().to(device)
-model.load_state_dict(torch.load("C:/Users/olabinmo/CSSE 416/MusicGenreClassifier 1.pth", map_location=device))
-model.eval()  # Set model to evaluation mode
-
 # Function to convert mp3 to wav if necessary
-# def convert_to_wav(filepath, target_sample_rate=22050):
-#     if filepath.endswith(".mp3"):
-#         audio = AudioSegment.from_mp3(filepath)
-#         wav_path = filepath.rsplit(".", 1)[0] + ".wav"  # Change file extension to .wav
-#         audio = audio.set_frame_rate(target_sample_rate).set_channels(1)  # Set sample rate and mono
-#         audio.export(wav_path, format="wav")
-#         os.remove(filepath)  # Remove the original mp3 file
-#         return wav_path
-#     return filepath
+def convert_mp3_to_wav(input_file: str, output_file: str, sample_rate: int = 22050):
+    try: 
+        audio = AudioSegment.from_mp3(input_file) # Load the MP3 file
+        audio = audio.set_frame_rate(sample_rate) # Set the desired sample rate
+        audio.export(output_file, format="wav") # Export as WAV
+        
+        print(f"Conversion successful! File saved to: {output_file}")
+    except Exception as e:
+        print(f"Error during conversion: {e}")
 
-# Function to convert audio to spectrogram
-def audio_to_spectrogram(filepath, sample_rate=22050):
+# Function to convert audio to spectrograms (sample_rate=22050, clip_length=6*22050+1=132301)
+def audio_to_spectrograms(filepath, savepath, sample_rate=22050, clip_length=132301):
     # Ensure file is in .wav format
     # filepath = convert_to_wav(filepath, sample_rate)
     
@@ -185,24 +148,77 @@ def audio_to_spectrogram(filepath, sample_rate=22050):
     if len(samples.shape) > 1:
         samples = np.mean(samples, axis=1)
 
-    # Convert audio to spectrogram
-    _, _, Zxx = stft(samples, fs=sample_rate, nperseg=sample_rate // 20, noverlap=(sample_rate // 20) // 2)
-    Zxx = np.abs(Zxx)  # Take the magnitude
-    Zxx = np.expand_dims(Zxx, axis=0)  # Add channel dimension
+    # create 6sec samples
+    clip_samples=[]
+    start = 0
+    end = start + clip_length
 
-    # Convert to PyTorch tensor
-    print("Done reading the file")
-    return torch.tensor(Zxx, dtype=torch.float32).unsqueeze(0).to(device)
+    while (end < len(samples)):
+        clip_samples.append(samples[start: end])
+        start = end
+        end = end + clip_length
+
+    i=0
+    for sample in clip_samples:
+        SFT = signal.ShortTimeFFT.from_window(win_param='tukey', 
+                                            fs=sample_rate, 
+                                            nperseg=sample_rate//20,      #make 20Hz minimum sampled frequency
+                                            noverlap=(sample_rate//20)//2,  #50% overlap
+                                            fft_mode='onesided', 
+                                            scale_to='magnitude', 
+                                            phase_shift=None,
+                                            symmetric_win=True)
+        Zxx = SFT.stft(sample)
+        np.save(savepath + "sample_" + str(i) + "_Z.npy", Zxx)
+        i+=1
+
+
+# Testing loop
+def music_classifier(model, state_dict, loader, classes):
+    # Load model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model.load_state_dict(torch.load(state_dict, weights_only=False, map_location=device))  # Use map_location for device compatibility
+    model.eval()  # Set model to evaluation mode
+    prediction_list = []
+
+    with torch.no_grad():
+        for tensors in loader:  # `tensors` is a batch of inputs
+            tensors = tensors.to(device)
+            outputs = model(tensors)
+            probabilities = F.softmax(outputs, dim=1)  # Apply softmax to get probabilities
+
+            # Get predicted classes and their confidences
+            predicted_classes = torch.argmax(probabilities, dim=1)  # Tensor of predicted class indices
+            confidences = probabilities.max(dim=1).values  # Tensor of maximum probabilities (confidence scores)
+
+            # Print and collect predictions
+            for pred, confidence in zip(predicted_classes, confidences):
+                prediction_list.append([classes[pred.item()], confidence.item()])
+                print(f"Predicted {classes[pred.item()]:10} with {confidence.item()*100:.2f}% confidence")
+
+    return prediction_list
+
+
+transform = transforms.Compose([
+    transforms.CenterCrop((544, 240)),
+    transforms.Normalize((0,), (0.5,))
+])
+
 
 @app.route('/classify_2D', methods=['POST'])
 def classify_genre():
     if 'audioFile' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
     
-    #Delete all files before uploading a new one
-    upload_folder = 'uploads'
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
+    #clear folders
+    if os.path.exists(app.config['UPLOAD_FOLDER']):
+        shutil.rmtree(app.config['UPLOAD_FOLDER'])
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
+    if os.path.exists(app.config['NPY_FOLDER']):
+        shutil.rmtree(app.config['NPY_FOLDER'])
+    os.makedirs(app.config['NPY_FOLDER'])
 
     # Save the uploaded file
     file = request.files['audioFile']
@@ -212,45 +228,33 @@ def classify_genre():
     file.save(file_path)
            
     print(file_path)
+    if (file_path.endswith('.mp3')):
+        convert_mp3_to_wav(file_path, file_path[:-4] + ".wav")
+        file_path = file_path[:-4] + ".wav"
+    elif (not file_path.endswith(".wav")):
+        return jsonify({"error": "Incompatible file type"}), 401
 
-    transform = transforms.Compose([
-    transforms.CenterCrop((544, 240)),
-    transforms.Normalize((0,), (0.5,))
-])
-    
-    music_dataset = NumpyDataset(root_dir=root_dir, transform=transform)
+    #try:
+    # Convert to spectrogram
+    print("Going to change the audio to a spectogram")
+    audio_to_spectrograms(file_path, app.config['NPY_FOLDER'])
+    print("Back from creating the spectogram and going to perform prediction")
 
-    print(len(music_dataset))
-
+    music_dataset = NumpyDataset(dir=app.config['NPY_FOLDER'], transform=transform)
     music_loader = DataLoader(dataset=music_dataset, batch_size=1, shuffle=False)
+    
+    # Perform prediction
+    classes = ["blues", "classical", "country", "disco", "hiphop", "jazz", "metal", "pop", "reggae", "rock"]
+    predictions = music_classifier(MusicNet(), "MusicGenreClassifier.pth", music_loader, classes)
 
-    music_classifier(model, music_loader)
+    # Clean up uploaded file
+    os.remove(file_path)
 
-    try:
-        # Convert to spectrogram
-        print("Going to change the audio to a spectogram")
-        spectrogram = audio_to_spectrogram(file_path)
-        print("Back from creating the spectogram and going to perform prediction")
-        
-        # Perform prediction
+    # Return the genre as JSON
+    return jsonify({"predictions":predictions})
+    #except Exception as e:
+    #    return jsonify({"error": str(e)}), 500
 
-        with torch.no_grad():
-            image, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-
-        print("Done with prediction " + predicted)
-        # Map prediction to genre label
-        genres = ["blues", "classical", "country", "disco", "hiphop", "jazz", "metal", "pop", "reggae", "rock"]
-        genre = genres[predicted.item()]
-
-        # Clean up uploaded file
-        os.remove(file_path)
-
-        # Return the genre as JSON
-        return jsonify({"genre": genre})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

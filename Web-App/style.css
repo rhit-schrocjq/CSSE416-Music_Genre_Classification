@@ -46,3 +46,31 @@ button:hover {
     font-size: 1.2rem;
     color: #333;
 }
+
+canvas {
+    margin: auto;
+    display: block;
+}
+
+/* Ensure the result section and chart area is scrollable */
+#genreChart, #result {
+    max-height: 400px;    /* Limit the height to prevent overflow */
+    overflow-y: auto;     /* Enable vertical scrolling */
+    margin-top: 20px;
+}
+
+
+
+/* Center the audio player */
+.audio-container {
+    display: flex;
+    justify-content: center;  /* Centers horizontally */
+    align-items: center;      /* Centers vertically */
+    margin-top: 20px;
+}
+
+/* Optional: Style the audio player */
+#audioPlayer {
+    max-width: 100%;
+    width: 300px;  /* Adjust width of the audio player */
+}
