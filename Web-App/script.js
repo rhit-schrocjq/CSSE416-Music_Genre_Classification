@@ -1,5 +1,6 @@
 const audioFileInput = document.getElementById('audioFile');
 const audioPlayer = document.getElementById('audioPlayer');
+const modelSelector = document.getElementById('modelSelector');
 
 // Show and load the audio player when a file is selected
 audioFileInput.addEventListener('change', () => {
@@ -15,10 +16,11 @@ audioFileInput.addEventListener('change', () => {
 
 // Handle the form submission to upload and classify the file
 document.getElementById('uploadForm').addEventListener('submit', async (event) => {
-    event.preventDefault();  // Prevent the default form submission
+    event.preventDefault(); // Prevent the default form submission
 
     const resultDiv = document.getElementById('result');
     const audioFile = audioFileInput.files[0];
+    const selectedModel = modelSelector.value; // Get the selected model from the dropdown
 
     if (!audioFile) {
         resultDiv.innerHTML = "Please upload a valid audio file.";
@@ -29,8 +31,13 @@ document.getElementById('uploadForm').addEventListener('submit', async (event) =
     const formData = new FormData();
     formData.append('audioFile', audioFile);
 
+    // Determine the API endpoint based on the selected model
+    const endpoint = selectedModel === '1D-cnn' 
+        ? 'http://127.0.0.1:5000/classify_1D' 
+        : 'http://127.0.0.1:5000/classify_2D';
+
     try {
-        const response = await fetch('http://127.0.0.1:5000/classify', {
+        const response = await fetch(endpoint, {
             method: 'POST',
             body: formData
         });

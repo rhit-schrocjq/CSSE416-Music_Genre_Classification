@@ -194,7 +194,7 @@ def audio_to_spectrogram(filepath, sample_rate=22050):
     print("Done reading the file")
     return torch.tensor(Zxx, dtype=torch.float32).unsqueeze(0).to(device)
 
-@app.route('/classify', methods=['POST'])
+@app.route('/classify_2D', methods=['POST'])
 def classify_genre():
     if 'audioFile' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
