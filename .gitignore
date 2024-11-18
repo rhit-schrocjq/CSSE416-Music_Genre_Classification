@@ -7,3 +7,6 @@ train_genres_images/
 uploads/
 npy/
 MusicGenreClassifier.pth
+MixedMusicGenreClassifier.pth
+music_features.npz
+instrument_features.npz
