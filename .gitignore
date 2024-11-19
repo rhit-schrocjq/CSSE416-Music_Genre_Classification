@@ -1,0 +1,6 @@
+MixedMusicGenreClassifier.pth
+MusicGenreClassifier.pth
+genres_original/
+genres_user_test/
+npy/
+uploads/
