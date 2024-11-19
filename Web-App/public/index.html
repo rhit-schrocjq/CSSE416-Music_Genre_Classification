@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Genre Classifier</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Music Genre Classifier</h1>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <label for="model">Choose a Model:</label>
+            <select id="modelSelector" name="model">
+                <option value="1D-cnn">1D Convolutional Neural Network</option>
+                <option value="2D-cnn">2D Convolutional Neural Network</option>
+            </select>
+            <br><br>
+            <input type="file" id="audioFile" name="audioFile" accept=".mp3, .wav" required>
+            <button type="submit">Classify Genre</button>
+        </form>
+
+        <!-- Audio player and result section -->
+        <div class="audio-container">
+            <audio id="audioPlayer" controls style="display:none;"></audio>
+        </div>
+
+        <div id="genreChart">
+            <canvas id="genreChartCanvas"></canvas>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+
+</html>
