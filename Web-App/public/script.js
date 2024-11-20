@@ -27,13 +27,14 @@ function clearChartContainer() {
 }
 
 // Function to count the frequency of genres
-function countGenres(predictions) {
+function countGenres(genres) {
     const genreCounts = {};
-    predictions.forEach(([genre]) => {
+    genres.forEach(genre => {
         genreCounts[genre] = (genreCounts[genre] || 0) + 1;
     });
     return genreCounts;
 }
+
 
 // Function to render the chart
 function renderChart(genres, frequencies) {
@@ -100,11 +101,14 @@ document.getElementById('uploadForm').addEventListener('submit', async (event) =
 
     // Determine the API endpoint based on the selected model
     const endpoint = selectedModel === '1D-cnn'
-        ? 'http://137.112.213.68:8080/classify_1D'
-        : 'http://137.112.213.68:8080/classify_2D';
+        ? 'http://127.0.0.1:5000/classify_1D'
+        : selectedModel === '2D-cnn'
+            ? 'http://127.0.0.1:5000/classify_2D'
+            : 'http://127.0.0.1:5000/classify_mixed'; // Add the endpoint for the mixed-cnn model
 
 
-    console.log("I am going to backend.py to performe classification");
+
+    console.log("I am going to backend.py to perform classification");
 
     try {
         const response = await fetch(endpoint, {
@@ -119,39 +123,78 @@ document.getElementById('uploadForm').addEventListener('submit', async (event) =
         const data = await response.json();
 
         console.log("This was returned from the backend.py: " + data.predictions);
+        if (selectedModel === '1D-cnn') {
+            // Format and display predictions with timestamps in a scrollable container
+            if (data.predictions && Array.isArray(data.predictions)) {
+                let currentTime = 0; // Start from 0:00
+                const predictionsHtml = data.predictions
+                    .map(prediction => {
+                        const timestamp = new Date(currentTime * 1000).toISOString().substr(14, 5); // Format as mm:ss
+                        currentTime += 6; // Increment by 6 seconds
+                        return `<li>${timestamp} - ${prediction}</li>`; // No confidence, just genre name
+                    })
+                    .join('');
 
-        // Format and display predictions with timestamps in a scrollable container
-        if (data.predictions && Array.isArray(data.predictions)) {
-            let currentTime = 0; // Start from 0:00
-            const predictionsHtml = data.predictions
-                .map(prediction => {
-                    const timestamp = new Date(currentTime * 1000).toISOString().substr(14, 5); // Format as mm:ss
-                    currentTime += 6; // Increment by 6 seconds
-                    return `<li>${timestamp} - ${prediction[0]}: ${(prediction[1] * 100).toFixed(2)}%</li>`;
-                })
-                .join('');
+                // Create a scrollable container
+                resultDiv.innerHTML = `
+                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 5px;">
+                        <ul>${predictionsHtml}</ul>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = "No predictions returned from the server.";
+            }
 
-            // Create a scrollable container
-            resultDiv.innerHTML = `
+            // Extract genres
+            const genres = data.predictions;
+            console.log("Genres generated from the 1D: " + genres);
+            const genreCounts = countGenres(genres); // Count genre frequencies
+            const genreKeys = Object.keys(genreCounts); // Genre labels
+            console.log("Genres generated from the genreKeys1D: " + genreKeys);
+            const frequencies = Object.values(genreCounts); // Frequency values
+
+            // Render the chart
+            clearChartContainer();
+            renderChart(genreKeys, frequencies);
+        }
+        else {
+
+            // Format and display predictions with timestamps in a scrollable container
+            if (data.predictions && Array.isArray(data.predictions)) {
+                let currentTime = 0; // Start from 0:00
+                const predictionsHtml = data.predictions
+                    .map(prediction => {
+                        const timestamp = new Date(currentTime * 1000).toISOString().substr(14, 5); // Format as mm:ss
+                        currentTime += 6; // Increment by 6 seconds
+                        return `<li>${timestamp} - ${prediction[0]}: ${(prediction[1] * 100).toFixed(2)}%</li>`;
+                    })
+                    .join('');
+
+                // Create a scrollable container
+                resultDiv.innerHTML = `
         <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 5px;">
             <ul>${predictionsHtml}</ul>
         </div>
     `;
-        } else {
-            resultDiv.innerHTML = "No predictions returned from the server.";
+            } else {
+                resultDiv.innerHTML = "No predictions returned from the server.";
+            }
+
+
+            // Extract genres and confidences
+            const genres = data.predictions.map(pred => pred[0]);
+            console.log("Genres generated from the 2D: " + genres);
+            const confidences = data.predictions.map(pred => pred[1]);
+            const genreCounts = countGenres(genres); // Count genre frequencies
+            const genreKeys = Object.keys(genreCounts); // Genre labels
+            console.log("Genres generated from the genreKeys2D: " + genreKeys);
+            const frequencies = Object.values(genreCounts); // Frequency values
+
+            // Render the chart
+            clearChartContainer();
+            renderChart(genreKeys, frequencies);
+
         }
-
-
-        // Extract genres and confidences
-        const genres = data.predictions.map(pred => pred[0]);
-        const confidences = data.predictions.map(pred => pred[1]);
-        const genreCounts = countGenres(genres); // Count genre frequencies
-        const genreKeys = Object.keys(genreCounts); // Genre labels
-        const frequencies = Object.values(genreCounts); // Frequency values
-
-        // Render the chart
-        clearChartContainer();
-        renderChart(genreKeys, frequencies);
 
     } catch (error) {
         resultDiv.innerHTML = `Error: ${error.message}`;
