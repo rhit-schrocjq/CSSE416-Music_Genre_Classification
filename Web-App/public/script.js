@@ -96,8 +96,8 @@ document.getElementById('uploadForm').addEventListener('submit', async (event) =
 
     // Determine the API endpoint based on the selected model
     const endpoint = selectedModel === '1D-cnn'
-        ? 'http://127.0.0.1:5000/classify_1D'
-        : 'http://127.0.0.1:5000/classify_2D';
+        ? 'http://137.112.213.68:8080/classify_1D'
+        : 'http://137.112.213.68:8080/classify_2D';
 
 
     console.log("I am going to backend.py to performe classification");

@@ -1,0 +1,8 @@
+Flask==2.3.2
+Flask-Cors==3.0.10
+torch==2.0.1  # Adjust based on the PyTorch version you're using
+numpy==1.24.4
+scipy==1.11.3
+pydub==0.25.1
+torchvision==0.15.2  # Required for `transforms`
+Werkzeug==2.3.7
