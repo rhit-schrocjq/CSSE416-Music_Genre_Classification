@@ -90,6 +90,10 @@ document.getElementById('uploadForm').addEventListener('submit', async (event) =
         return;
     }
 
+    // Show loading spinner
+    document.getElementById('loadingSpinner').style.display = 'block';
+    resultDiv.innerHTML = ""; // Clear previous results
+
     // Prepare the form data for upload
     const formData = new FormData();
     formData.append('audioFile', audioFile);
@@ -151,5 +155,9 @@ document.getElementById('uploadForm').addEventListener('submit', async (event) =
 
     } catch (error) {
         resultDiv.innerHTML = `Error: ${error.message}`;
+    }
+    finally {
+        // Hide loading spinner after the request completes
+        document.getElementById('loadingSpinner').style.display = 'none';
     }
 });
