@@ -45,8 +45,8 @@ You will also need to download:
 
 1. Clone this repository:
    ```bash
-   git clone <repository_url>
-   cd <repository_folder>
+   git clone (https://github.com/rhit-schrocjq/CSSE416-Music_Genre_Classification.git)
+   
 2. Install the necessary python dependencies:
     ```bash
     pip install flask torchaudio torch numpy scipy pydub torchvision librosa flask-cors
